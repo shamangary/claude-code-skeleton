@@ -17,7 +17,7 @@ matching:
 
 **Audience:** Upstream maintainers.
 
-**File-level map:** **[`../../MATCHING.md`](../../MATCHING.md)** → section `scripts/MACRO.md` (1:many).
+**Coverage:** All eight files in `claude-code/scripts/` are declared in this MACRO.md's `matching.paths` and appear in the covered-paths table in [`../../MATCHING.md`](../../MATCHING.md).
 
 **Upstream tree:** [`../../claude-code/scripts/`](../../claude-code/scripts/).
 

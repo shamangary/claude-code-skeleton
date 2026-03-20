@@ -2,17 +2,11 @@
 matching:
   paths:
   - plugins/plugin-dev/skills/skill-development/SKILL.md
+  - plugins/plugin-dev/skills/skill-development/references/skill-creator-original.md
 ---
 
 # Skill: `skill-development`
 
-**Role:** Authoring **skills**: trigger design, progressive disclosure, reference splitting, packaging.
+**Role:** Authoring **skills**: trigger design, progressive disclosure, reference splitting, and packaging.
 
-**Contents:**
-
-| Subfolder | Macro meaning |
-|-----------|----------------|
-| `SKILL.md` | Entry + conventions for Claude Code skills. |
-| `references/` | Historical / extended creator notes (**cluster**). |
-
-**Neighbors:** [Skills catalog](../MACRO.md).
+**Contents:** `SKILL.md` is the entry point covering conventions for Claude Code skills. `references/skill-creator-original.md` provides supplemental historical and extended creator notes supporting the entry point.

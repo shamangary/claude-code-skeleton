@@ -9,7 +9,7 @@ Layout (workspace root = parent of this matching/ directory):
     claude-code-skeleton/
     matching/
       generate_matching.py
-    MATCHING.md               # written here
+    MATCHING.md               # written here (summary + tables; full overwrite)
 
 Usage:
 
@@ -17,6 +17,23 @@ Usage:
   python3 matching/generate_matching.py              # fetch upstream + regenerate
   python3 matching/generate_matching.py --no-fetch   # use existing claude-code/
   python3 matching/generate_matching.py --seed       # refresh matching.paths (then run without --seed)
+
+MACRO.md granularity guidance
+------------------------------
+Prefer fewer, higher-level MACRO.md files rather than one per subdirectory:
+  - One per plugin root  (covers README, plugin.json, hooks, scripts)
+  - One per skill        (covers SKILL.md + references/ + examples/ as a group)
+  - Only create a sub-folder MACRO.md when it has 5+ files worth of independent description.
+
+The --seed flag assigns upstream files to the *nearest existing* MACRO.md, so if you
+consolidate MACRO.md files first, --seed will naturally produce broader path lists per file.
+
+Open vs closed in upstream
+---------------------------
+claude-code/ contains ~180 readable files (prompts, manifests, hook scripts, settings).
+The agent loop, context compression, permission enforcement, and tool dispatch live in the
+minified @anthropic-ai/claude-code npm bundle and are not readable here. This matcher
+only indexes the open file topology — see GLOSSARY.md for a full open/closed breakdown.
 """
 
 from __future__ import annotations
@@ -25,6 +42,7 @@ import argparse
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -57,12 +75,6 @@ def skip_path(parts: tuple[str, ...]) -> bool:
         return True
     return any(p in SKIP_ANYWHERE for p in parts)
 
-
-def is_paired_prompt(rel: Path) -> bool:
-    if rel.suffix != ".md":
-        return False
-    p = rel.parts
-    return len(p) >= 2 and p[-2] in ("commands", "agents")
 
 
 def owner_macro_for(skel: Path, rel_file: Path) -> Path | None:
@@ -148,6 +160,114 @@ def fetch_upstream(up: Path, remote: str, branch: str | None) -> list[str]:
     return log
 
 
+def upstream_git_snapshot(up: Path) -> dict[str, str] | None:
+    """Best-effort git identity for claude-code/. Empty strings omit that field."""
+    up = up.resolve()
+    if not (up / ".git").is_dir():
+        return None
+
+    def run_git(args: list[str]) -> str:
+        r = subprocess.run(
+            ["git", "-C", str(up)] + args,
+            capture_output=True,
+            text=True,
+        )
+        return (r.stdout or "").strip() if r.returncode == 0 else ""
+
+    commit = run_git(["rev-parse", "HEAD"])
+    short = run_git(["rev-parse", "--short", "HEAD"]) if commit else ""
+    branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"])
+    if branch == "HEAD":
+        branch = "(detached)"
+    subject = run_git(["log", "-1", "--format=%s"])
+    when = run_git(["log", "-1", "--format=%ci"])
+    describe = run_git(["describe", "--tags", "--always", "--dirty"])
+    origin = run_git(["remote", "get-url", "origin"])
+
+    out: dict[str, str] = {}
+    if commit:
+        out["commit"] = commit
+    if short:
+        out["short"] = short
+    if branch:
+        out["branch"] = branch
+    if subject:
+        out["subject"] = subject
+    if when:
+        out["date"] = when
+    if describe:
+        out["describe"] = describe
+    if origin:
+        out["origin"] = origin
+    return out or None
+
+
+def print_terminal_summary(
+    up: Path,
+    out: Path,
+    stats: dict[str, int],
+    vr: ValidationResult,
+) -> None:
+    ok_report = (
+        stats["duplicate_claim_errors"]
+        + stats["missing_declared_upstream"]
+        + stats["yaml_or_schema_errors"]
+        == 0
+    )
+    sep = "─" * 52
+    print()
+    print(sep)
+    print("  claude-code/ (upstream git)")
+    print(sep)
+    snap = upstream_git_snapshot(up)
+    if snap is None:
+        print("  (not a git repository — unexpected for a normal clone)")
+    else:
+        if snap.get("describe"):
+            print(f"  version:   {snap['describe']}")
+        if snap.get("short") and snap.get("commit"):
+            print(f"  commit:    {snap['short']} ({snap['commit']})")
+        elif snap.get("commit"):
+            print(f"  commit:    {snap['commit']}")
+        if snap.get("branch"):
+            print(f"  branch:    {snap['branch']}")
+        if snap.get("subject"):
+            print(f"  summary:   {snap['subject']}")
+        if snap.get("date"):
+            print(f"  date:      {snap['date']}")
+        if snap.get("origin"):
+            print(f"  origin:    {snap['origin']}")
+    print()
+    print(sep)
+    print("  matching summary")
+    print(sep)
+    status = "PASS" if ok_report else "FAIL"
+    try:
+        out_display = str(out.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        out_display = str(out)
+    n_errors = (
+        stats["duplicate_claim_errors"]
+        + stats["yaml_or_schema_errors"]
+        + stats["missing_declared_upstream"]
+    )
+    print(f"  {status}   →  {out_display}")
+    print()
+    print(f"  upstream files:   {stats['upstream_files_indexed']}   "
+          f"uncovered: {stats['uncovered_upstream_files']}")
+    print(f"  MACRO.md files:   {stats['macro_md_files']}   "
+          f"paths declared: {stats['paths_declared']}")
+    print()
+    if n_errors == 0:
+        print("  errors: none")
+    else:
+        print(f"  errors: dup {stats['duplicate_claim_errors']}  "
+              f"yaml {stats['yaml_or_schema_errors']}  "
+              f"missing-decl {stats['missing_declared_upstream']}")
+    print(sep)
+    print()
+
+
 def default_assignments(skel: Path, up: Path) -> dict[str, list[str]]:
     all_files: list[Path] = []
     for p in sorted(up.rglob("*")):
@@ -160,8 +280,6 @@ def default_assignments(skel: Path, up: Path) -> dict[str, list[str]]:
 
     assignments: dict[str, list[str]] = {}
     for rel in all_files:
-        if is_paired_prompt(rel):
-            continue
         own = owner_macro_for(skel, rel)
         if own is None:
             continue
@@ -259,23 +377,21 @@ def collect_macro_paths(skel: Path, up: Path) -> ValidationResult:
     return vr
 
 
+def _md_cell_inline(text: str) -> str:
+    """Single inline code span; avoid breaking markdown tables."""
+    t = text.replace("`", "´")
+    return f"`{t}`"
+
+
 def build_matching(
     skel: Path,
     up: Path,
     out: Path,
-    fetch_log: list[str],
     vr: ValidationResult,
-) -> tuple[list[str], list[str], dict[str, int]]:
-    """Returns (paired_ok, paired_fail, stats)."""
+) -> dict[str, int]:
+    """Write MATCHING.md (summary + tables only). Returns stats dict."""
     skel = skel.resolve()
     up = up.resolve()
-    macro_md = sorted(
-        p
-        for p in skel.rglob("*.macro.md")
-        if not any(part == ".git" for part in p.relative_to(skel).parts)
-    )
-    paired_ok: list[str] = []
-    paired_fail: list[str] = []
 
     all_upstream: list[Path] = []
     for p in up.rglob("*"):
@@ -286,146 +402,114 @@ def build_matching(
             continue
         all_upstream.append(rel)
 
-    claimed_from_yaml = set()
+    claimed = set()
     for paths in vr.macro_paths.values():
         for p in paths:
-            claimed_from_yaml.add(p.replace("\\", "/").lstrip("/"))
-
-    claimed_1_1 = set()
-    for p in macro_md:
-        rel = p.relative_to(skel)
-        stem = p.name.removesuffix(".macro.md") + ".md"
-        upstream_rel = rel.with_name(stem)
-        u = upstream_rel.as_posix()
-        claimed_1_1.add(u)
-        if (up / upstream_rel).is_file():
-            paired_ok.append(f"| `{rel.as_posix()}` | `{u}` ✓ |")
-        else:
-            paired_fail.append(f"| `{rel.as_posix()}` | `{u}` ✗ |")
-
-    implicit_covered = set()
-    for rel in all_upstream:
-        if is_paired_prompt(rel):
-            implicit_covered.add(rel.as_posix())
+            claimed.add(p.replace("\\", "/").lstrip("/"))
 
     all_pos = {rel.as_posix() for rel in all_upstream}
-    fully_claimed = claimed_from_yaml | claimed_1_1 | implicit_covered
-    uncovered = sorted(all_pos - fully_claimed)
+    uncovered = sorted(all_pos - claimed)
 
-    lines: list[str] = []
-    lines.append("# MATCHING: skeleton ↔ `claude-code/`\n\n")
-    lines.append(
-        "Maps **`claude-code-skeleton/`** to **`claude-code/`** (paths relative to each repo root).\n\n"
-    )
-    lines.append("> **Generated** by `python3 matching/generate_matching.py`  \n")
-    lines.append("> Source of truth: YAML `matching.paths` on each **`MACRO.md`**.  \n")
-    lines.append(
-        "> Dependencies: `python3 -m pip install -r matching/requirements.txt`  \n\n"
-    )
-
-    # --- Summary stats (first-class) ---
     n_yaml_paths = sum(len(v) for v in vr.macro_paths.values())
     stats = {
         "upstream_files_indexed": len(all_pos),
-        "macro_1_many_paths": n_yaml_paths,
-        "macro_1_1_pairs_total": len(macro_md),
-        "macro_1_1_ok": len(paired_ok),
-        "macro_1_1_missing_upstream": len(paired_fail),
+        "macro_md_files": len(vr.macro_paths),
+        "paths_declared": n_yaml_paths,
         "uncovered_upstream_files": len(uncovered),
         "duplicate_claim_errors": len(vr.duplicate_claims),
         "yaml_or_schema_errors": len(vr.yaml_errors),
         "missing_declared_upstream": len(vr.missing_upstream),
     }
-    lines.append("## Report summary\n\n")
-    lines.append("| Metric | Count |\n|--------|-------:|\n")
-    for k, v in stats.items():
-        lines.append(f"| {k.replace('_', ' ').title()} | {v} |\n")
-    lines.append("\n")
-
     ok_report = (
         stats["duplicate_claim_errors"]
         + stats["missing_declared_upstream"]
         + stats["yaml_or_schema_errors"]
-        + stats["macro_1_1_missing_upstream"]
         == 0
     )
+
+    gen_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    snap = upstream_git_snapshot(up)
+
+    lines: list[str] = []
+    lines.append("# MATCHING\n\n")
     lines.append(
-        f"**Overall:** `{'PASS' if ok_report else 'FAIL'}`"
-        " — non-zero issue counts below mean the report is still written, but you should fix YAML or upstream sync.\n\n"
+        f"Generated {gen_ts} — `python3 matching/generate_matching.py` "
+        "(this file is overwritten each run; edit `claude-code-skeleton/**/MACRO.md`, not here.)\n\n"
+    )
+    lines.append(f"**Overall:** `{'PASS' if ok_report else 'FAIL'}`\n\n")
+    if snap:
+        bits = []
+        if snap.get("describe"):
+            bits.append(snap["describe"])
+        if snap.get("short"):
+            bits.append(f"@{snap['short']}")
+        if snap.get("branch"):
+            bits.append(f"({snap['branch']})")
+        line = " ".join(bits) if bits else ""
+        if snap.get("subject"):
+            line = (line + " — " if line else "") + snap["subject"]
+        if line:
+            lines.append(f"- **claude-code/** {line}\n")
+    else:
+        lines.append("- **claude-code/** *(not a git checkout or no `.git`)*\n")
+    lines.append(
+        f"- **Counts:** {stats['upstream_files_indexed']} upstream files; "
+        f"{stats['macro_md_files']} MACRO.md files; "
+        f"{stats['paths_declared']} paths declared; "
+        f"{stats['uncovered_upstream_files']} uncovered; "
+        f"errors dup/yaml/missing {stats['duplicate_claim_errors']}/"
+        f"{stats['yaml_or_schema_errors']}/{stats['missing_declared_upstream']}\n\n"
     )
 
-    if fetch_log:
-        lines.append("## Upstream sync log\n\n")
-        for row in fetch_log:
-            lines.append(f"- {row}\n")
-        lines.append("\n")
-
-    lines.append("## Ignored when indexing upstream\n\n")
-    lines.append(
-        "These path rules exclude files from **uncovered** / **indexed** counts (mirroring skeleton policy):\n\n"
-    )
-    lines.append(f"- Top-level only skipped: `{sorted(SKIP_TOP)}`\n")
-    lines.append(f"- Any path segment skipped: `{sorted(SKIP_ANYWHERE)}`\n")
-    lines.append(
-        "- **`*.md` in `**/commands/` and `**/agents/`** are covered implicitly by the **1:1** table, not by `matching.paths`.\n\n"
-    )
-
-    if vr.duplicate_claims or vr.missing_upstream or vr.yaml_errors:
-        lines.append("## Validation issues\n\n")
-        if vr.yaml_errors:
-            lines.append("### YAML / frontmatter\n\n")
-            for e in vr.yaml_errors:
-                lines.append(f"- {e}\n")
-            lines.append("\n")
-        if vr.duplicate_claims:
-            lines.append("### Duplicate `matching.paths`\n\n")
-            for e in vr.duplicate_claims:
-                lines.append(f"- {e}\n")
-            lines.append("\n")
-        if vr.missing_upstream:
-            lines.append("### Missing upstream (declared in MACRO but absent on disk)\n\n")
-            for e in vr.missing_upstream:
-                lines.append(f"- {e}\n")
-            lines.append("\n")
-
-    lines.append("## Rules\n\n")
-    lines.append(
-        "1. **`MACRO.md`** — YAML `matching.paths` (no `**/commands/*.md` / `**/agents/*.md` here).\n"
-    )
-    lines.append(
-        "2. **`*.macro.md`** — 1:1 with upstream `*.md` (same relative path; strip `.macro`).\n"
-    )
-    lines.append("3. Paths in this doc are relative to each repo root.\n\n")
-
-    lines.append("## 1:1 — `*.macro.md` → upstream `*.md`\n\n")
-    lines.append("| Skeleton | Upstream |\n|----------|----------|\n")
-    for row in sorted(paired_ok) + sorted(paired_fail):
-        lines.append(row + "\n")
-    lines.append("\n")
-
-    lines.append("## 1:many — `MACRO.md` → `matching.paths`\n\n")
+    lines.append("---\n\n")
+    lines.append("## MACRO.md → `matching.paths`\n\n")
+    lines.append("| MACRO.md | Path |\n|----------|------|\n")
+    many_rows: list[tuple[str, str]] = []
     for skel_macro in sorted(vr.macro_paths.keys(), key=lambda s: (s != "MACRO.md", s)):
         paths = vr.macro_paths[skel_macro]
-        lines.append(f"### `{skel_macro}`\n\n")
-        lines.append(f"**Files ({len(paths)}):**\n\n")
-        for f in paths:
-            lines.append(f"- `{f}`\n")
-        lines.append("\n")
+        if paths:
+            for f in paths:
+                many_rows.append((skel_macro, f.replace("\\", "/").lstrip("/")))
+        else:
+            many_rows.append((skel_macro, ""))
+    if many_rows:
+        for macro_key, path in many_rows:
+            path_cell = _md_cell_inline(path) if path else "*(empty)*"
+            lines.append(
+                f"| {_md_cell_inline(macro_key)} | {path_cell} |\n"
+            )
+    else:
+        lines.append("| — | *(no MACRO.md parsed)* |\n")
+    lines.append("\n")
 
+    lines.append("## Uncovered upstream files\n\n")
+    lines.append("| Path |\n|------|\n")
     if uncovered:
-        lines.append("## Uncovered upstream files (informational)\n\n")
-        lines.append(
-            "Files under `claude-code/` not assigned to any `matching.paths`, "
-            "not a 1:1 prompt pair, and not ignored by policy — you may add them to a `MACRO.md` or extend ignore rules.\n\n"
-        )
-        for f in uncovered[:500]:
-            lines.append(f"- `{f}`\n")
-        if len(uncovered) > 500:
-            lines.append(f"\n… *{len(uncovered) - 500} more*\n")
-        lines.append("\n")
+        for f in uncovered:
+            lines.append(f"| {_md_cell_inline(f)} |\n")
+    else:
+        lines.append("| *(none)* |\n")
+    lines.append("\n")
+
+    lines.append("## Validation issues\n\n")
+    lines.append("| Kind | Detail |\n|------|--------|\n")
+    issue_rows: list[tuple[str, str]] = []
+    for e in vr.yaml_errors:
+        issue_rows.append(("yaml", e))
+    for e in vr.duplicate_claims:
+        issue_rows.append(("duplicate_paths", e))
+    for e in vr.missing_upstream:
+        issue_rows.append(("missing_upstream", e))
+    if issue_rows:
+        for kind, detail in issue_rows:
+            d = detail.replace("\n", " ").replace("|", "\\|")
+            lines.append(f"| `{kind}` | {d} |\n")
+    else:
+        lines.append("| — | *(none)* |\n")
+    lines.append("\n")
 
     out.write_text("".join(lines), encoding="utf-8")
-    return paired_ok, paired_fail, stats
+    return stats
 
 
 def main() -> None:
@@ -486,16 +570,11 @@ def main() -> None:
         seed_frontmatter(skel, up)
 
     vr = collect_macro_paths(skel, up)
-    paired_ok, paired_fail, _stats = build_matching(skel, up, out, fetch_log, vr)
+    stats = build_matching(skel, up, out, vr)
 
-    print(f"Wrote {out}")
-    print(
-        f"1:1 pairs ok/miss: {len(paired_ok)}/{len(paired_fail)} | "
-        f"issues: dup={len(vr.duplicate_claims)} missing={len(vr.missing_upstream)} "
-        f"yaml={len(vr.yaml_errors)}"
-    )
+    print_terminal_summary(up, out, stats, vr)
 
-    if vr.fatal or paired_fail:
+    if vr.fatal:
         sys.exit(1)
 
 

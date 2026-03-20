@@ -1,6 +1,9 @@
 ---
 matching:
-  paths: []
+  paths:
+    - .claude/commands/dedupe.md
+    - .claude/commands/commit-push-pr.md
+    - .claude/commands/triage-issue.md
 ---
 
 # `.claude/` (repo root)
@@ -11,7 +14,7 @@ matching:
 
 | Path | Macro meaning |
 |------|----------------|
-| `commands/*.md` | Maintainer workflows (issue triage, dedupe, commit/push/PR). Each has a paired **`*.macro.md`** in this skeleton under [`commands/`](commands/). |
+| `commands/*.md` | Maintainer workflows: `triage-issue` (label + prioritise), `dedupe` (find and close duplicate issues), `commit-push-pr` (commit, push, open PR). |
 
 **Audience:** Anthropic maintainers and contributors working *in* this repo.
 
