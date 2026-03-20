@@ -19,6 +19,41 @@ After a successful run, the script prints a **terminal summary** (upstream git r
 
 ---
 
+## The agentic loop — reference model
+
+Claude Code's loop runs three phases that repeat until the task is done or you interrupt:
+
+```
+gather context  →  take action  →  verify results  →  (repeat)
+```
+
+Claude Code is the **agentic harness** around the model: it provides tools, context management, and execution environment. The model reasons; the tools act.
+
+**Five built-in tool categories** (official names from [docs](https://code.claude.com/docs/en/how-claude-code-works)):
+
+| Category | What Claude can do |
+|----------|-------------------|
+| File operations | Read, edit, create, rename |
+| Search | Glob patterns, regex content search |
+| Execution | Shell commands, tests, git |
+| Web | Search, fetch docs |
+| Code intelligence | Type errors after edits, definitions, references |
+
+**Context management** — relevant when writing MACRO.md prose and when designing long-horizon loops:
+
+- `CLAUDE.md` is loaded every session and survives compaction — put invariants here
+- Skills load on demand; only descriptions are in context until triggered (`disable-model-invocation: true` keeps them out entirely)
+- Subagents get fresh isolated context — their work does not bloat the main session
+- `/compact focus on X` guides what the compressor preserves; `/context` shows what's consuming budget
+
+**Session model** — relevant for parallel or long-running agentic work:
+
+- `claude --continue` resumes the same session (conversation history restored, not session-scoped permissions)
+- `claude --continue --fork-session` branches from the current state with a new session ID
+- Git worktrees give each branch its own directory and therefore its own independent Claude session
+
+---
+
 ## Open vs. closed — reverse-engineering boundary
 
 The upstream repo exposes the **extension layer** (~180 files): plugin manifests, skill prompts, slash commands, hook scripts, example settings, workflow YAML. This is what the skeleton maps.
@@ -32,13 +67,13 @@ The upstream repo exposes the **extension layer** (~180 files): plugin manifests
 
 **What the skeleton cannot capture** (closed, obfuscated npm bundle or server-side):
 
-- Agent loop internals — which tool to call next, stop conditions, reasoning structure
-- Context compression — when it triggers, how history is summarised
+- Agent loop internals — phase transitions, tool selection heuristics, stop conditions
+- Context compression implementation — when it triggers, what the summariser preserves
 - Permission enforcement implementation — how allow/deny rules are evaluated at runtime
 - Tool dispatch and sandboxing
 - Model inference and token sampling
 
-Hook events are **surface hooks into the closed agent loop**. You observe and influence boundaries; you do not see the interior. Use `GLOSSARY.md` for the full open/closed term breakdown.
+Hook events (`PreToolUse`, `Stop`, …) are **surface hooks into the closed agent loop** — you observe and influence boundaries; you do not see the interior. Use `GLOSSARY.md` for the full open/closed term breakdown.
 
 **Implication for MACRO.md prose:** document what the files *declare* (prompts, manifests, hook scripts). Inferences about runtime behavior should be explicitly flagged as inferences, not stated as fact.
 
