@@ -1,69 +1,52 @@
-<div align="center">
+# Claude Code — macro workspace (`claude-code-skeleton`)
 
-<img src="claude-code-skeleton-icon.png" alt="Claude Code Skeleton — pixel-art three-headed skeleton mascot" width="128" />
+**Open this folder** as your project root in the IDE: it is the **main repo** that contains upstream **`claude-code/`**, the nested **`claude-code-skeleton/`** macro mirror, and **`matching/`**.
 
-# Claude Code Skeleton
+This repository brings together **upstream Claude Code**, a **natural-language skeleton** of that tree, and a **matcher** that keeps an auditable map between them.
 
-**Natural-language macro layer** for [Claude Code](https://github.com/anthropics/claude-code): skill-style **`MACRO.md`** maps, paired **`*.macro.md`** next to commands/agents, and a workspace-level **[`../MATCHING.md`](../MATCHING.md)** (generated from YAML — lives **next to** this folder, not inside `scripts/`).
+## Layout
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+```text
+./
+├── README.md                 # This file
+├── PLAN.md                   # Conventions and workflows
+├── MATCHING.md               # GENERATED — read-only; do not edit by hand
+├── matching/
+│   ├── generate_matching.py # Fetches upstream (default) + writes MATCHING.md
+│   └── requirements.txt     # PyYAML
+├── claude-code/              # Official Anthropic repo (clone or your fork)
+└── claude-code-skeleton/     # MACRO.md / *.macro.md mirror (no implementation copy)
+```
 
-<br/>
+## Matching (recommended workflow)
 
-</div>
-
-This folder is a **parallel, skimmable atlas** of plugins, examples, hooks, marketplace manifest, maintainer slash commands, and GitHub automation — **without** duplicating implementation source.
-
-**Parent workspace:** see **[`../README.md`](../README.md)** (clone/pull upstream + run **`matching/generate_matching.py`**) and **[`../PLAN.md`](../PLAN.md)** (conventions).
-
----
-
-## Why this exists
-
-| You want… | This folder gives you… |
-|-----------|------------------------|
-| **Orientation** | YAML frontmatter + prose on folders via **`MACRO.md`** |
-| **A concrete map** | **[`../MATCHING.md`](../MATCHING.md)** — auto-generated from `matching.paths` |
-| **Command/agent context** | **`foo.macro.md`** beside each upstream **`foo.md`** in **`commands/`** and **`agents/`** |
-| **Vocabulary** | **[`GLOSSARY.md`](GLOSSARY.md)** |
-
-Most directories use **`MACRO.md`**; **`commands/`** and **`agents/`** use **`*.macro.md`** only (no rollup `MACRO.md` there).
-
----
-
-## Layout (mirrors upstream `claude-code/`)
-
-**Mirrored:** `plugins/`, `examples/`, `.claude/commands/`, `.claude-plugin/`, `Script/`, **`scripts/MACRO.md`** (documents upstream `claude-code/scripts/` only), `.github/`, `.devcontainer/`.
-
-**Omitted:** `.vscode/`, `.git/`, bulky assets — see ignore rules in **[`../MATCHING.md`](../MATCHING.md)**.
-
-**Not here:** the generator lives in **`../matching/generate_matching.py`** so this tree is not confused with **`claude-code/scripts/`**.
-
----
-
-## Documentation inside this folder
-
-| Doc | Purpose |
-|-----|---------|
-| **[`MACRO.md`](MACRO.md)** | Root macro index |
-| **[`plugins/MACRO.md`](plugins/MACRO.md)** | Plugins roll-up |
-| **[`../MATCHING.md`](../MATCHING.md)** | Skeleton ↔ upstream (**generated** at workspace root) |
-| **[`../PLAN.md`](../PLAN.md)** | Conventions, frontmatter, matcher workflow |
-| **[`GLOSSARY.md`](GLOSSARY.md)** | Shared vocabulary |
-
-### Regenerate `MATCHING.md`
-
-From the **workspace root** (parent of this directory):
+**Running the matcher updates `claude-code/` to the latest default remote and rebuilds `MATCHING.md`.**
 
 ```bash
 python3 -m pip install -r matching/requirements.txt
+# or: python3 -m pip install -r requirements.txt
 python3 matching/generate_matching.py
 ```
 
-See **[`../README.md`](../README.md)** — by default this **updates `claude-code/` from GitHub** then rewrites **`MATCHING.md`**.
+What it does:
 
----
+1. **`git pull --ff-only`** inside `claude-code/` if it is already a repo, or **`git clone --depth 1`** from **`https://github.com/anthropics/claude-code.git`** if the folder is missing/empty.
+2. Reads **`matching.paths`** YAML on every **`claude-code-skeleton/**/MACRO.md`**.
+3. Writes **`MATCHING.md`** with:
+   - **Report summary** (counts, PASS/FAIL),
+   - **Ignored paths** policy (.git, .vscode, implicit command/agent prompts),
+   - **1:1** and **1:many** tables,
+   - **Validation issues** (duplicate paths, missing upstream files, bad YAML),
+   - **Uncovered upstream files** (informational — not necessarily errors).
+
+Use **`python3 matching/generate_matching.py --no-fetch`** if you manage `claude-code/` yourself (fork, pin, or air‑gapped).
+
+Other flags: **`--remote URL`**, **`--branch BRANCH`**, **`--seed`** (rebuild YAML path lists — review git diff). Details in **[`PLAN.md`](PLAN.md)** and the docstring in **`matching/generate_matching.py`**.
+
+## Skeleton-only docs
+
+See **[`claude-code-skeleton/README.md`](claude-code-skeleton/README.md)** for the macro layer README (atlas of plugins, hooks, examples, etc.).
 
 ## License
 
-[MIT](LICENSE) © Tsun-Yi Yang
+Skeleton content: see **`claude-code-skeleton/LICENSE`**. Upstream **`claude-code/`** remains under its own license.

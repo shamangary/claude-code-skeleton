@@ -1,0 +1,5 @@
+# Upstream mirror — clone locally; do not commit
+claude-code/
+
+# Unrelated local project (optional)
+avatar-agent/
