@@ -19,6 +19,6 @@ matching:
 
 **Layout:** Under [`plugins/`](plugins/), most dirs use **`MACRO.md`**; **`plugins/.../commands/`** and **`plugins/.../agents/`** use **`foo.macro.md`** next to each upstream `foo.md`. The **repo’s own** [`.claude/commands/`](.claude/commands/) uses the same **`*.macro.md`** pattern for Anthropic’s maintainer slash flows.
 
-**Neighbors:** **[`MATCHING.md`](MATCHING.md)** (skeleton ↔ upstream index); [`plugins/MACRO.md`](plugins/MACRO.md); [`examples/MACRO.md`](examples/MACRO.md); [`.claude/MACRO.md`](.claude/MACRO.md); [`.claude-plugin/MACRO.md`](.claude-plugin/MACRO.md); [`scripts/MACRO.md`](scripts/MACRO.md); [`.github/MACRO.md`](.github/MACRO.md); [`.devcontainer/MACRO.md`](.devcontainer/MACRO.md); [`Script/MACRO.md`](Script/MACRO.md).
+**Neighbors:** **[`../MATCHING.md`](../MATCHING.md)** (generated at workspace root); [`plugins/MACRO.md`](plugins/MACRO.md); [`examples/MACRO.md`](examples/MACRO.md); [`.claude/MACRO.md`](.claude/MACRO.md); [`.claude-plugin/MACRO.md`](.claude-plugin/MACRO.md); [`scripts/MACRO.md`](scripts/MACRO.md); [`.github/MACRO.md`](.github/MACRO.md); [`.devcontainer/MACRO.md`](.devcontainer/MACRO.md); [`Script/MACRO.md`](Script/MACRO.md).
 
 **Stability:** Descriptions follow the upstream repo at the time of writing; they are **not** a semver API contract—plugin manifests and hooks are the real contracts.
