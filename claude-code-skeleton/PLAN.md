@@ -1,4 +1,4 @@
-# PLAN: Macro monorepo (`claude-code-skeleton/`)
+# PLAN: Macro workspace (`claude-code` + `claude-code-skeleton`)
 
 ## Purpose
 

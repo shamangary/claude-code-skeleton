@@ -1,2 +1,0 @@
-# Monorepo root — delegates to matcher deps
--r matching/requirements.txt
