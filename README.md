@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="claude-code-skeleton-icon.png" alt="Claude Code Skeleton — macro workspace" width="120">
+  <img src="claude-code-skeleton-icon.png" alt="Claude Code Skeleton — macro workspace" width="240">
 </p>
 
 <h1 align="center">Claude Code Skeleton</h1>
@@ -34,23 +34,23 @@ Before building extensions, understand what you're extending. Claude Code's loop
 
 ```
 Your prompt
-    │
-    ▼
-┌─────────────────┐
-│  Gather context │  ← read files, search, run tests, web fetch
-└────────┬────────┘
+     │
+     ▼
+┌──────────────────┐
+│  Gather context  │  ← read files, search, run tests, web fetch
+└────────┬─────────┘
          │
-    ▼
-┌─────────────────┐
-│   Take action   │  ← edit files, run commands, call agents
-└────────┬────────┘
+         ▼
+┌──────────────────┐
+│   Take action    │  ← edit files, run commands, call agents
+└────────┬─────────┘
          │
-    ▼
-┌─────────────────┐
-│  Verify results │  ← run tests, check output, re-read files
-└────────┬────────┘
+         ▼
+┌──────────────────┐
+│  Verify results  │  ← run tests, check output, re-read files
+└────────┬─────────┘
          │
-    ▼ (loop until done, or you interrupt)
+         ▼ (loop until done, or you interrupt)
 ```
 
 Claude Code is the **agentic harness** around the model — it provides tools, context management, and execution environment. The model reasons; the tools act.
